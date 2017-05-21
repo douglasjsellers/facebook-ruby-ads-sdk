@@ -35,7 +35,7 @@ module FacebookAds
         time_increment: time_increment,
         time_range: { 'since': range.first.to_s, 'until': range.last.to_s }
       }
-      AdInsight.paginate("/#{id}/insights", query: query)
+      AdInsight.batch("/#{id}/insights", query: query)
     end 
     
   end

@@ -2,19 +2,43 @@ module FacebookAds
   # The base class for all ads objects.
   class Base < Hashie::Mash
     class << self
+
       def find(id)
         get("/#{id}", objectify: true)
       end
 
+      def batch( path, query )
+        @batch_queries ||= []        
+        @batch_queries << {"method" => "GET", "relative_url" => path, "body" => build_nested_query( query )}
+      end
+
+      def run_batch
+        query = pack({batch: @batch_queries.to_json}, objectify: true) # Adds access token, fields, etc.
+        uri = "#{FacebookAds.base_uri}"
+        responses = begin
+                     RestClient.post(uri, query)
+                   rescue RestClient::Exception => e
+                     exception(:get, '/', e)
+                   end
+        
+        to_return = []
+        JSON.parse(responses.body).each do |response|
+          to_return << unpack(response, objectify: true )
+        end
+        to_return
+      end
+      
+      
+      
       def get(path, query: {}, objectify:)
         query = pack(query, objectify: objectify) # Adds access token, fields, etc.
         uri = "#{FacebookAds.base_uri}#{path}?" + build_nested_query(query)
         FacebookAds.logger.debug "GET #{uri}"
         response = begin
-          RestClient.get(uri, accept: :json, accept_encoding: :identity)
-        rescue RestClient::Exception => e
-          exception(:get, path, e)
-        end
+                     RestClient.get(uri, accept: :json, accept_encoding: :identity)
+                   rescue RestClient::Exception => e
+                     exception(:get, path, e)
+                   end
         unpack(response, objectify: objectify)
       end
 
@@ -23,10 +47,10 @@ module FacebookAds
         uri = "#{FacebookAds.base_uri}#{path}"
         FacebookAds.logger.debug "POST #{uri} #{query}"
         response = begin
-          RestClient.post(uri, query)
-        rescue RestClient::Exception => e
-          exception(:post, path, e)
-        end
+                     RestClient.post(uri, query)
+                   rescue RestClient::Exception => e
+                     exception(:post, path, e)
+                   end
         unpack(response, objectify: false)
       end
 
@@ -35,10 +59,10 @@ module FacebookAds
         uri = "#{FacebookAds.base_uri}#{path}?" + build_nested_query(query)
         FacebookAds.logger.debug "DELETE #{uri}"
         response = begin
-          RestClient.delete(uri)
-        rescue RestClient::Exception => e
-          exception(:delete, path, e)
-        end
+                     RestClient.delete(uri)
+                   rescue RestClient::Exception => e
+                     exception(:delete, path, e)
+                   end
         unpack(response, objectify: false)
       end
 
@@ -52,10 +76,10 @@ module FacebookAds
           while !(paging = response['paging']).nil? && !(url = paging['next']).nil?
             FacebookAds.logger.debug "GET #{url}"
             response = begin
-              RestClient.get(url)
-            rescue RestClient::Exception => e
-              exception(:get, url, e)
-            end
+                         RestClient.get(url)
+                       rescue RestClient::Exception => e
+                         exception(:get, url, e)
+                       end
             response = unpack(response, objectify: false)
             data += response['data'] unless response['data'].nil?
           end
@@ -94,10 +118,10 @@ module FacebookAds
 
         if response.is_a?(String)
           response = begin
-            JSON.parse(response)
-          rescue JSON::ParserError
-            raise Exception, "Invalid JSON response: #{response.inspect}"
-          end
+                       JSON.parse(response)
+                     rescue JSON::ParserError
+                       raise Exception, "Invalid JSON response: #{response.inspect}"
+                     end
         end
 
         raise Exception, "Invalid response: #{response.class.name} #{response.inspect}" unless response.is_a?(Hash)
@@ -135,25 +159,25 @@ module FacebookAds
         response = exception.response
 
         message = if response.is_a?(String)
-          begin
-            if (error = JSON.parse(response)['error']).nil?
-              response
-            elsif error['error_subcode'].nil? || error['error_user_title'].nil? || error['error_user_msg'].nil?
-              "#{error['type']} / #{error['code']}: #{error['message']}"
-            else
-              exception = AdException.new(
-                code: error['error_subcode'],
-                title: error['error_user_title'],
-                message: error['error_user_msg']
-              )
-              "#{exception.code} / #{exception.title}: #{exception.message}"
-            end
-          rescue JSON::ParserError
-            response
-          end
-        else
-          response.inspect
-        end
+                    begin
+                      if (error = JSON.parse(response)['error']).nil?
+                        response
+                      elsif error['error_subcode'].nil? || error['error_user_title'].nil? || error['error_user_msg'].nil?
+                        "#{error['type']} / #{error['code']}: #{error['message']}"
+                      else
+                        exception = AdException.new(
+                          code: error['error_subcode'],
+                          title: error['error_user_title'],
+                          message: error['error_user_msg']
+                        )
+                        "#{exception.code} / #{exception.title}: #{exception.message}"
+                      end
+                    rescue JSON::ParserError
+                      response
+                    end
+                  else
+                    response.inspect
+                  end
 
         FacebookAds.logger.error "#{verb.upcase} #{path} #{message}"
         raise exception
