@@ -2,32 +2,13 @@ module FacebookAds
   # The base class for all ads objects.
   class Base < Hashie::Mash
     class << self
-
+      def start_batching
+        include FacebookAds::BatchBase        
+      end
+      
       def find(id)
         get("/#{id}", objectify: true)
       end
-
-      def batch( path, query )
-        @batch_queries ||= []        
-        @batch_queries << {"method" => "GET", "relative_url" => path, "body" => build_nested_query( query )}
-      end
-
-      def run_batch
-        query = pack({batch: @batch_queries.to_json}, objectify: true) # Adds access token, fields, etc.
-        uri = "#{FacebookAds.base_uri}"
-        responses = begin
-                     RestClient.post(uri, query)
-                   rescue RestClient::Exception => e
-                     exception(:get, '/', e)
-                   end
-        
-        to_return = []
-        JSON.parse(responses.body).each do |response|
-          to_return << unpack(response, objectify: true )
-        end
-        to_return
-      end
-      
       
       
       def get(path, query: {}, objectify:)
@@ -202,7 +183,7 @@ module FacebookAds
       response = self.class.delete(path || "/#{id}", query: query)
       response['success']
     end
-
+    
     protected
 
     attr_accessor :changes

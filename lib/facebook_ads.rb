@@ -5,6 +5,7 @@ require 'hashie'
 require 'logger'
 
 # Internal requires.
+require 'facebook_ads/batch_base'
 require 'facebook_ads/base'
 Dir[File.expand_path('../facebook_ads/*.rb', __FILE__)].each { |f| require f }
 
